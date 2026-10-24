@@ -1,0 +1,20 @@
+# React Native
+APK-Android/node_modules/
+APK-Android/android/.gradle/
+APK-Android/android/build/
+APK-Android/android/app/build/
+APK-Android/android/.cxx/
+APK-Android/android/app/debug.keystore
+APK-Android/ios/Pods/
+APK-Android/ios/build/
+
+# .NET
+Ejecutable-Windows/bin/
+Ejecutable-Windows/obj/
+Ejecutable-Windows/.vs/
+
+# Editores y sistema
+.DS_Store
+Thumbs.db
+*.user
+*.suo
