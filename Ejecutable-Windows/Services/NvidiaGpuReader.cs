@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using PanelPc.Agent.Models;
 
 namespace PanelPc.Agent.Services;
 
@@ -17,6 +18,9 @@ internal sealed class NvidiaGpuReader : IDisposable
     private readonly NvmlShutdown _shutdown;
     private readonly DeviceGetUtilizationRates _getUtilizationRates;
     private readonly DeviceGetTemperature _getTemperature;
+    private readonly DeviceGetMemoryInfo _getMemoryInfo;
+    private readonly DeviceGetClockInfo _getClockInfo;
+    private readonly DeviceGetFanSpeed _getFanSpeed;
     private bool _disposed;
 
     private NvidiaGpuReader(
@@ -25,6 +29,9 @@ internal sealed class NvidiaGpuReader : IDisposable
         NvmlShutdown shutdown,
         DeviceGetUtilizationRates getUtilizationRates,
         DeviceGetTemperature getTemperature,
+        DeviceGetMemoryInfo getMemoryInfo,
+        DeviceGetClockInfo getClockInfo,
+        DeviceGetFanSpeed getFanSpeed,
         string? name)
     {
         _library = library;
@@ -32,6 +39,9 @@ internal sealed class NvidiaGpuReader : IDisposable
         _shutdown = shutdown;
         _getUtilizationRates = getUtilizationRates;
         _getTemperature = getTemperature;
+        _getMemoryInfo = getMemoryInfo;
+        _getClockInfo = getClockInfo;
+        _getFanSpeed = getFanSpeed;
         Name = name;
     }
 
@@ -57,6 +67,9 @@ internal sealed class NvidiaGpuReader : IDisposable
             var getName = GetExport<DeviceGetName>(library, "nvmlDeviceGetName");
             var getUtilizationRates = GetExport<DeviceGetUtilizationRates>(library, "nvmlDeviceGetUtilizationRates");
             var getTemperature = GetExport<DeviceGetTemperature>(library, "nvmlDeviceGetTemperature");
+            var getMemoryInfo = GetExport<DeviceGetMemoryInfo>(library, "nvmlDeviceGetMemoryInfo");
+            var getClockInfo = GetExport<DeviceGetClockInfo>(library, "nvmlDeviceGetClockInfo");
+            var getFanSpeed = GetExport<DeviceGetFanSpeed>(library, "nvmlDeviceGetFanSpeed");
 
             if (initialize() != NvmlSuccess)
             {
@@ -88,6 +101,9 @@ internal sealed class NvidiaGpuReader : IDisposable
                 shutdown,
                 getUtilizationRates,
                 getTemperature,
+                getMemoryInfo,
+                getClockInfo,
+                getFanSpeed,
                 name);
         }
         catch (Exception) when (initialized || library != IntPtr.Zero)
@@ -119,8 +135,35 @@ internal sealed class NvidiaGpuReader : IDisposable
             ? temperature
             : null;
 
-        return new GpuMetrics(Name, usagePercent, temperatureCelsius);
+        ulong? memoryUsedBytes = null;
+        ulong? memoryTotalBytes = null;
+        if (_getMemoryInfo(_device, out var memory) == NvmlSuccess)
+        {
+            memoryUsedBytes = memory.Used;
+            memoryTotalBytes = memory.Total;
+        }
+
+        double? clockMHz = _getClockInfo(_device, 0, out var clock) == NvmlSuccess ? clock : null;
+        double? fanPercent = _getFanSpeed(_device, out var fanSpeed) == NvmlSuccess ? fanSpeed : null;
+
+        var clockReadings = new[]
+            {
+                ReadClock(0, "Gráficos"),
+                ReadClock(1, "Shaders"),
+                ReadClock(2, "Memoria"),
+                ReadClock(3, "Video"),
+            }
+            .Where(reading => reading is not null)
+            .Select(reading => reading!)
+            .ToArray();
+
+        return new GpuMetrics(Name, usagePercent, temperatureCelsius, memoryUsedBytes, memoryTotalBytes, clockMHz, fanPercent, clockReadings);
     }
+
+    private TelemetryReading? ReadClock(uint clockType, string name) =>
+        _getClockInfo(_device, clockType, out var clock) == NvmlSuccess && clock > 0
+            ? new TelemetryReading("NVIDIA", name, clock, "MHz")
+            : null;
 
     public void Dispose()
     {
@@ -184,12 +227,37 @@ internal sealed class NvidiaGpuReader : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int DeviceGetTemperature(IntPtr device, uint sensorType, out uint temperature);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int DeviceGetMemoryInfo(IntPtr device, out NvmlMemory memory);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int DeviceGetClockInfo(IntPtr device, uint clockType, out uint clockMHz);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int DeviceGetFanSpeed(IntPtr device, out uint fanPercent);
+
     [StructLayout(LayoutKind.Sequential)]
     private struct NvmlUtilization
     {
         public uint Gpu;
         public uint Memory;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NvmlMemory
+    {
+        public ulong Total;
+        public ulong Free;
+        public ulong Used;
+    }
 }
 
-internal sealed record GpuMetrics(string? Name, double? UsagePercent, double? TemperatureCelsius);
+internal sealed record GpuMetrics(
+    string? Name,
+    double? UsagePercent,
+    double? TemperatureCelsius,
+    ulong? MemoryUsedBytes,
+    ulong? MemoryTotalBytes,
+    double? ClockMHz,
+    double? FanPercent,
+    IReadOnlyList<TelemetryReading> ClockReadings);

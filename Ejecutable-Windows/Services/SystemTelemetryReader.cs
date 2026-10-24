@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using PanelPc.Agent.Models;
 
 namespace PanelPc.Agent.Services;
@@ -12,6 +13,8 @@ internal sealed class SystemTelemetryReader : IDisposable
     private CpuCounters? _previousCpuCounters;
     private NvidiaGpuReader? _gpuReader;
     private bool _gpuReaderInitialized;
+    private HardwareSensorReader? _hardwareSensorReader;
+    private DiskTelemetryReader? _diskTelemetryReader;
 
     public void BeginSession()
     {
@@ -24,6 +27,16 @@ internal sealed class SystemTelemetryReader : IDisposable
         var cpuUsagePercent = ReadCpuUsagePercent();
         var (ramUsedBytes, ramTotalBytes) = ReadMemory();
         var gpu = GetGpuReader()?.Read();
+        _hardwareSensorReader ??= new HardwareSensorReader();
+        var hardware = _hardwareSensorReader.Read();
+        _diskTelemetryReader ??= new DiskTelemetryReader();
+        var disks = _diskTelemetryReader.Read(hardware.StorageReadings);
+
+        var fans = hardware.FanReadings.ToList();
+        if (gpu?.FanPercent is double gpuFanPercent)
+        {
+            fans.Add(new TelemetryReading("NVIDIA", "Ventilador GPU", gpuFanPercent, "%"));
+        }
 
         return new TelemetrySnapshot(
             capturedAtUtc,
@@ -32,12 +45,38 @@ internal sealed class SystemTelemetryReader : IDisposable
             gpu?.UsagePercent,
             gpu?.TemperatureCelsius,
             ramUsedBytes,
-            ramTotalBytes);
+            ramTotalBytes,
+            hardware.CpuName,
+            Environment.ProcessorCount,
+            hardware.CpuTemperatureCelsius,
+            hardware.CpuClockMHz,
+            hardware.MotherboardName,
+            hardware.MotherboardTemperatureCelsius,
+            hardware.MotherboardFanRpm,
+            hardware.RamTemperatureCelsius,
+            gpu?.MemoryUsedBytes,
+            gpu?.MemoryTotalBytes,
+            gpu?.ClockMHz,
+            gpu?.FanPercent,
+            hardware.MotherboardTemperatureSensors,
+            hardware.CpuCoreReadings,
+            fans,
+            hardware.CpuClockReadings,
+            gpu?.ClockReadings ?? [],
+            disks,
+            Environment.MachineName,
+            RuntimeInformation.OSDescription,
+            RuntimeInformation.OSArchitecture.ToString(),
+            Environment.Version.ToString(),
+            Math.Max(0, Environment.TickCount64 / 1000),
+            new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator));
     }
 
     public void Dispose()
     {
         _gpuReader?.Dispose();
+        _hardwareSensorReader?.Dispose();
+        _diskTelemetryReader?.Dispose();
     }
 
     private double? ReadCpuUsagePercent()
