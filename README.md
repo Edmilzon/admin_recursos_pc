@@ -72,6 +72,38 @@ Desarrollo/
 - `WebSocket` y `AppState` integrados en React Native; no se añadió una biblioteca de WebSocket ni de gráficas.
 - Dependencias de desarrollo del template: React Native CLI, Metro, Babel, TypeScript, ESLint, Jest y Prettier. No se instalaron en esta entrega.
 
+#### Dependencias npm declaradas
+
+La lista exacta también está en [`APK-Android/package.json`](APK-Android/package.json). Estas son las dependencias directas; los paquetes transitivos los resuelve npm.
+
+| Tipo | Paquete | Versión declarada |
+|---|---|---:|
+| Runtime | `react` | `19.3.0` |
+| Runtime | `react-native` | `0.88.0` |
+| Runtime | `@react-native/new-app-screen` | `0.88.0` (del template; la pantalla actual no lo importa) |
+| Runtime | `react-native-safe-area-context` | `^5.5.2` (declarado por el template; la pantalla actual no lo importa) |
+| Desarrollo | `@babel/core` | `^7.25.2` |
+| Desarrollo | `@babel/preset-env` | `^7.25.3` |
+| Desarrollo | `@babel/runtime` | `^7.25.0` |
+| Desarrollo | `@react-native-community/cli` | `20.2.0` |
+| Desarrollo | `@react-native-community/cli-platform-android` | `20.2.0` |
+| Desarrollo | `@react-native-community/cli-platform-ios` | `20.2.0` (incluido por el template; iOS no forma parte de este MVP) |
+| Desarrollo | `@react-native/babel-preset` | `0.88.0` |
+| Desarrollo | `@react-native/eslint-config` | `0.88.0` |
+| Desarrollo | `@react-native/jest-preset` | `0.88.0` |
+| Desarrollo | `@react-native/metro-config` | `0.88.0` |
+| Desarrollo | `@react-native/typescript-config` | `0.88.0` |
+| Desarrollo | `@types/jest` | `^29.5.13` |
+| Desarrollo | `@types/react` | `^19.2.0` |
+| Desarrollo | `@types/react-test-renderer` | `^19.1.0` |
+| Desarrollo | `eslint` | `^8.19.0` |
+| Desarrollo | `jest` | `^29.6.3` |
+| Desarrollo | `prettier` | `2.8.8` |
+| Desarrollo | `react-test-renderer` | `19.3.0` |
+| Desarrollo | `typescript` | `^6.0.3` |
+
+Las versiones que empiezan con `^` permiten actualizaciones compatibles. Como todavía no hay `package-lock.json`, la primera instalación puede resolver versiones transitivas distintas; conviene guardar el lockfile que genere npm para fijar esa resolución.
+
 ### Agente Windows
 
 - Windows 10/11 x64 y .NET SDK `10.0`.
@@ -85,9 +117,31 @@ Desarrollo/
 - Activar Opciones de desarrollador y Depuración USB, conectarlo y aceptar la autorización ADB en la pantalla del teléfono.
 - Android SDK Platform Tools instaladas para disponer de `adb`.
 
+### Estado de herramientas de esta PC
+
+Según la revisión de dependencias realizada antes de desarrollar este MVP:
+
+| Herramienta | Estado registrado | Requisito del proyecto |
+|---|---|---|
+| Node.js | `24.13.0`, instalado | `>=22.11.0` |
+| npm | `11.6.2`, instalado junto con Node | Instalado junto con Node |
+| JDK | `17.0.20.1`, instalado | JDK 17 |
+| .NET SDK | `10.0.402`, instalado | SDK 10.0 |
+| Android Studio | Instalado | Necesario para SDK Manager y desarrollo Android |
+| Android SDK Platform | API 35 registrado | El scaffold actual declara compile SDK 37; instalar/actualizar API 37 |
+| Android Build Tools | `36.0.0` registrado | El scaffold actual declara `37.0.0`; instalar/actualizar esa versión |
+| Android Platform Tools / ADB | Instalado | Requerido para `adb reverse` |
+| Android NDK | Versión requerida no quedó confirmada | El proyecto declara `27.1.12297006`; verificar en SDK Manager |
+| Paquetes npm del proyecto | No instalados (`node_modules` no preparado) | Ejecutar `npm install` en `APK-Android` |
+| Restauración del agente | No realizada | Ejecutar `dotnet restore`; no hay paquetes NuGet externos declarados |
+
+Este inventario es el resultado de la revisión anterior, no una nueva comprobación de versiones. La actualización del SDK 35/Build Tools 36 al SDK 37/Build Tools 37 es necesaria para coincidir con los valores actuales de Gradle.
+
 ## Instalación de herramientas en Windows
 
 Estos son comandos sugeridos para preparar otra máquina; **no se ejecutaron durante esta entrega**. Si ya tienes una herramienta, no vuelvas a instalarla.
+
+La PC ya tenía Node, JDK, .NET, Android Studio y ADB instalados según la revisión anterior. No quedó registrado en el README el comando exacto de aquella instalación global, por eso no lo atribuyo ni lo invento. En cambio, aquí quedan comandos reproducibles para instalar o actualizar lo que falte.
 
 En PowerShell o Windows Terminal con WinGet para .NET y Node/JDK (si tus fuentes de WinGet tienen esos paquetes):
 
