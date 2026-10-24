@@ -1,3 +1,5 @@
+import {useTelemetry} from './src/hooks/useTelemetry';
+import type {ConnectionState} from './src/types/telemetry';
 import {
   ScrollView,
   StatusBar,
@@ -23,18 +25,68 @@ function MetricCard({
 }: MetricCardProps) {
   return (
     <View style={styles.metricCard}>
-      <View style={[styles.metricAccent, { backgroundColor: accent }]} />
+      <View style={[styles.metricAccent, {backgroundColor: accent}]} />
       <Text style={styles.metricLabel}>{label}</Text>
       <View style={styles.metricValueRow}>
         <Text style={styles.metricValue}>{value}</Text>
         {unit ? <Text style={styles.metricUnit}>{unit}</Text> : null}
       </View>
-      <Text style={styles.metricDetail}>{detail}</Text>
+      <Text numberOfLines={2} style={styles.metricDetail}>
+        {detail}
+      </Text>
     </View>
   );
 }
 
+function formatPercent(value: number | null | undefined) {
+  return value == null ? '—' : `${Math.round(value)}`;
+}
+
+function formatGiB(value: number | null | undefined) {
+  return value == null ? '—' : (value / 1024 ** 3).toFixed(1);
+}
+
+function connectionLabel(state: ConnectionState) {
+  switch (state) {
+    case 'connected':
+      return 'CONECTADO';
+    case 'connecting':
+      return 'CONECTANDO';
+    case 'paused':
+      return 'EN PAUSA';
+    default:
+      return 'SIN CONEXIÓN';
+  }
+}
+
 function App() {
+  const {connectionState, snapshot} = useTelemetry();
+  const isConnected = connectionState === 'connected';
+  const cpuDetail = snapshot
+    ? 'Uso general del procesador'
+    : 'Esperando lectura de Windows';
+  const gpuDetail = snapshot
+    ? snapshot.gpuName ?? 'GPU o lectura NVML no disponible'
+    : 'Esperando lectura de Windows';
+  const temperatureDetail = snapshot
+    ? snapshot.gpuTemperatureCelsius == null
+      ? 'Sensor no disponible en NVML'
+      : 'Temperatura reportada por NVML'
+    : 'Esperando lectura de Windows';
+  const ramUsed = snapshot?.ramUsedBytes;
+  const ramTotal = snapshot?.ramTotalBytes;
+  const ramPercent =
+    ramUsed != null && ramTotal != null && ramTotal > 0
+      ? Math.round((ramUsed / ramTotal) * 100)
+      : null;
+  const ramDetail =
+    ramPercent == null
+      ? 'En uso / total'
+      : `${ramPercent}% en uso · ${formatGiB(ramTotal)} GB total`;
+  const updateTime = snapshot
+    ? new Date(snapshot.capturedAtUtc).toLocaleTimeString()
+    : null;
+
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor="#0B1016" />
@@ -49,57 +101,81 @@ function App() {
           </View>
 
           <View style={styles.connectionPill}>
-            <View style={styles.connectionDot} />
-            <Text style={styles.connectionText}>SIN CONEXIÓN</Text>
+            <View
+              style={[
+                styles.connectionDot,
+                isConnected ? styles.connectionDotActive : null,
+                connectionState === 'connecting'
+                  ? styles.connectionDotWaiting
+                  : null,
+              ]}
+            />
+            <Text style={styles.connectionText}>
+              {connectionLabel(connectionState)}
+            </Text>
           </View>
         </View>
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>RECURSOS</Text>
-          <Text style={styles.liveLabel}>EN ESPERA</Text>
+          <Text style={styles.liveLabel}>
+            {isConnected ? 'EN VIVO' : connectionState === 'paused' ? 'PAUSADO' : 'EN ESPERA'}
+          </Text>
         </View>
 
         <View style={styles.metricsGrid}>
           <MetricCard
             label="PROCESADOR"
-            value="—"
+            value={formatPercent(snapshot?.cpuUsagePercent)}
             unit="%"
-            detail="Uso de CPU"
+            detail={cpuDetail}
             accent="#58D6AE"
           />
           <MetricCard
             label="GRÁFICA NVIDIA"
-            value="—"
+            value={formatPercent(snapshot?.gpuUsagePercent)}
             unit="%"
-            detail="Uso de GPU"
+            detail={gpuDetail}
             accent="#8DA8FF"
           />
           <MetricCard
             label="TEMPERATURA GPU"
-            value="—"
+            value={
+              snapshot?.gpuTemperatureCelsius == null
+                ? '—'
+                : `${Math.round(snapshot.gpuTemperatureCelsius)}`
+            }
             unit="°C"
-            detail="Sensor no conectado"
+            detail={temperatureDetail}
             accent="#FFB36B"
           />
           <MetricCard
             label="MEMORIA RAM"
-            value="—"
+            value={formatGiB(ramUsed)}
             unit="GB"
-            detail="En uso / total"
+            detail={ramDetail}
             accent="#D69BFF"
           />
         </View>
 
         <View style={styles.notice}>
-          <Text style={styles.noticeTitle}>Esperando a la PC</Text>
+          <Text style={styles.noticeTitle}>
+            {isConnected
+              ? 'Lecturas de la PC recibidas'
+              : connectionState === 'paused'
+                ? 'Panel en pausa'
+                : 'Esperando a la PC'}
+          </Text>
           <Text style={styles.noticeText}>
-            Los guiones indican que todavía no hay lecturas. La conexión USB y
-            la lectura de sensores se integrarán después de validar el método
-            de comunicación.
+            {isConnected && updateTime
+              ? `Última lectura: ${updateTime}. Si un sensor no está disponible, se muestra como guion.`
+              : connectionState === 'paused'
+                ? 'La aplicación deja de consultar mientras está en segundo plano.'
+                : 'Conecta el celular por USB y habilita adb reverse en Windows. Las lecturas antiguas se limpian al perder conexión.'}
           </Text>
         </View>
 
-        <Text style={styles.footer}>MODO LOCAL · SIN DATOS SIMULADOS</Text>
+        <Text style={styles.footer}>USB · SOLO LECTURA · SIN DATOS SIMULADOS</Text>
       </ScrollView>
     </View>
   );
@@ -155,6 +231,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#7C8792',
     marginRight: 7,
+  },
+  connectionDotActive: {
+    backgroundColor: '#58D6AE',
+  },
+  connectionDotWaiting: {
+    backgroundColor: '#FFB36B',
   },
   connectionText: {
     color: '#A8B2BC',
