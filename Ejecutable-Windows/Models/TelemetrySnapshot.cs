@@ -7,6 +7,7 @@ namespace PanelPc.Agent.Models;
 public sealed record TelemetrySnapshot(
     DateTimeOffset CapturedAtUtc,
     double? CpuUsagePercent,
+    string? GpuName,
     double? GpuUsagePercent,
     double? GpuTemperatureCelsius,
     ulong? RamUsedBytes,
