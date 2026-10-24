@@ -7,9 +7,11 @@ namespace PanelPc.Agent.Services;
 /// Lee CPU y memoria con APIs de Windows. No crea un temporizador: el agente
 /// llama a Read únicamente mientras hay un panel conectado.
 /// </summary>
-internal sealed class SystemTelemetryReader
+internal sealed class SystemTelemetryReader : IDisposable
 {
     private CpuCounters? _previousCpuCounters;
+    private NvidiaGpuReader? _gpuReader;
+    private bool _gpuReaderInitialized;
 
     public void BeginSession()
     {
@@ -21,15 +23,21 @@ internal sealed class SystemTelemetryReader
         var capturedAtUtc = DateTimeOffset.UtcNow;
         var cpuUsagePercent = ReadCpuUsagePercent();
         var (ramUsedBytes, ramTotalBytes) = ReadMemory();
+        var gpu = GetGpuReader()?.Read();
 
         return new TelemetrySnapshot(
             capturedAtUtc,
             cpuUsagePercent,
-            null,
-            null,
-            null,
+            gpu?.Name,
+            gpu?.UsagePercent,
+            gpu?.TemperatureCelsius,
             ramUsedBytes,
             ramTotalBytes);
+    }
+
+    public void Dispose()
+    {
+        _gpuReader?.Dispose();
     }
 
     private double? ReadCpuUsagePercent()
@@ -77,6 +85,18 @@ internal sealed class SystemTelemetryReader
         }
 
         return (status.TotalPhysical - status.AvailablePhysical, status.TotalPhysical);
+    }
+
+    private NvidiaGpuReader? GetGpuReader()
+    {
+        if (_gpuReaderInitialized)
+        {
+            return _gpuReader;
+        }
+
+        _gpuReaderInitialized = true;
+        _gpuReader = NvidiaGpuReader.TryCreate();
+        return _gpuReader;
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]
